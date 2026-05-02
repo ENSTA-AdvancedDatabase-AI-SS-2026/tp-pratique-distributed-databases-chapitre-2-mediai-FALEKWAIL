@@ -558,8 +558,11 @@ ORDER BY p.siteOrigin, score_moyen DESC;
 
 **Exécutez et interprétez les résultats :**
 
-> ```
-> [VOTRE RÉSULTAT]
+> site,modele_ia,nb_examens,score_moyen,score_min,score_max
+Montreal,CardioAI-1,4,0.9420,0.9100,0.9850
+Paris,SpineAI-2,3,0.9921,0.9810,0.9990
+Tokyo,NeuroAI-3,3,0.9650,0.9400,0.9780
+Tunis,NephroAI-1,4,0.9215,0.8800,0.9678
 > ```
 
 **Question 3.2.a** : Quel modèle IA obtient le meilleur score moyen ? Sur quel site ?
