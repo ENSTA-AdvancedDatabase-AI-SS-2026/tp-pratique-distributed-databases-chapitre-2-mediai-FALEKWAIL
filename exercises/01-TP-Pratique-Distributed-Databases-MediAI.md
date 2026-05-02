@@ -4,9 +4,9 @@
 
 ---
 
-> **Nom :** ___________________________  
-> **Prénom :** ___________________________  
-> **Date :** ___________________________  
+> **Nom :** falek  
+> **Prénom :** wail  
+> **Date :** 02/05  
 > **Note :** ___ / 100
 
 ---
@@ -52,7 +52,7 @@ docker exec -it citus_master psql -U postgres -d mediAI
 > **Collez votre capture ici :**
 > 
 > ```
-> [VOTRE CAPTURE D'ÉCRAN]
+> <img width="1587" height="889" alt="Screenshot 2026-05-02 161541" src="https://github.com/user-attachments/assets/7cf92fba-5b50-49fd-b68b-c24732d36c13" />
 > ```
 
 ---
@@ -72,7 +72,7 @@ SELECT citus_add_node('citus_worker3', 5432);
 
 > **Votre réponse :**
 > 
-> _______________________________________________
+> Le Coordinator (nœud maître) est le point d'entrée qui reçoit les requêtes, planifie leur exécution de manière distribuée et ne stocke que les métadonnées. Les Workers sont les nœuds qui stockent réellement les fragments de données (shards) et exécutent localement les requêtes envoyées par le coordinator.
 
 **Question 1.2.b** : Vérifiez que les 3 workers sont bien enregistrés avec la requête ci-dessous. Combien de lignes obtenez-vous ?
 
@@ -84,8 +84,7 @@ ORDER BY nodeid;
 
 > **Résultat et réponse :**
 > 
-> _______________________________________________
-
+> J'obtiens 3 lignes (une pour chaque worker : citus_worker1, citus_worker2, citus_worker3), avec la colonne isactive indiquant t (true).
 ---
 
 ### 1.3 – Chargement du schéma et des données
@@ -118,10 +117,10 @@ SELECT 'Transactions',                 COUNT(*)              FROM Transactions;
 > 
 > | table_name | nb_lignes attendu | nb_lignes observé |
 > |---|---|---|
-> | Patients | 20 | ___ |
-> | MedicalRecords | 14 | ___ |
-> | TrainingData | 13 | ___ |
-> | Transactions | 18 | ___ |
+> | Patients | 20 | 20 |
+> | MedicalRecords | 14 | 14 |
+> | TrainingData | 13 | 13 |
+> | Transactions | 18 | 18 |
 
 ---
 
@@ -171,10 +170,28 @@ CREATE OR REPLACE VIEW TrainingData_Tokyo AS
 ```
 
 > **Votre code SQL complété :**
+> -- Fragment Paris
+CREATE OR REPLACE VIEW TrainingData_Paris AS
+    SELECT * FROM TrainingData
+    WHERE siteOrigin = 'Paris';
+
+-- Fragment Tunis
+CREATE OR REPLACE VIEW TrainingData_Tunis AS
+    SELECT * FROM TrainingData
+    WHERE siteOrigin = 'Tunis';
+
+-- Fragment Montréal
+CREATE OR REPLACE VIEW TrainingData_Montreal AS
+    SELECT * FROM TrainingData
+    WHERE siteOrigin = 'Montreal';
+
+-- Fragment Tokyo
+CREATE OR REPLACE VIEW TrainingData_Tokyo AS
+    SELECT * FROM TrainingData
+    WHERE siteOrigin = 'Tokyo';
 > 
-> ```sql
 > 
-> ```
+> 
 
 #### ✏️ Exercice 2.1.b – Vérifier la completeness (complétude)
 
@@ -194,8 +211,8 @@ SELECT COUNT(*) AS total_global FROM TrainingData;
 **Question 2.1.b** : La propriété de complétude est-elle respectée ? Justifiez.
 
 > **Votre réponse :**
+> Oui, la propriété de complétude est respectée. La somme des lignes de chaque fragment (Paris, Tunis, Montreal, Tokyo) est exactement égale au total des lignes (13) de la table globale TrainingData. Aucun tuple n'est perdu.
 > 
-> _______________________________________________
 
 #### ✏️ Exercice 2.1.c – Distribution Citus effective
 
@@ -214,14 +231,12 @@ ORDER BY s.shardid;
 📸 **Capture d'écran attendue** : résultat de la requête ci-dessus.
 
 > **Collez votre capture ici :**
-> 
-> ```
-> [VOTRE CAPTURE]
-> ```
+> <img width="708" height="729" alt="Screenshot 2026-05-02 162850" src="https://github.com/user-attachments/assets/7d9f0fd3-a3b8-4386-bc0c-c9bffc29f0cc" />
+
 
 **Question 2.1.c** : Sur quel(s) worker(s) les données du site "Tokyo" sont-elles stockées ?
 
-> _______________________________________________
+> Sur le nœud citus_worker3.
 
 ---
 
@@ -247,8 +262,10 @@ Fragment B – Données IA (data scientists) :
 
 **Question** : Pourquoi séparer les données cliniques des données IA ? Donnez 2 raisons.
 
-> 1. _______________________________________________  
-> 2. _______________________________________________
+> 1. Sécurité et Confidentialité : Les data scientists n'ont pas besoin des résultats cliniques nominatifs pour entraîner l'IA, cette séparation protège la vie privée des patients.
+
+> 2. Performance (I/O) : Les requêtes d'entraînement IA ne scannent que les modèles et les scores. Éviter de charger en mémoire de longs textes cliniques accélère massivement l'exécution.  
+
 
 #### ✏️ Exercice 2.2.b – Les vues sont déjà créées dans le schéma, testez-les
 
@@ -270,10 +287,8 @@ LIMIT 5;
 📸 **Capture d'écran** : résultat de la reconstruction
 
 > **Collez votre capture ici :**
-> 
-> ```
-> [VOTRE CAPTURE]
-> ```
+> <img width="680" height="371" alt="Screenshot 2026-05-02 163100" src="https://github.com/user-attachments/assets/09f39317-2850-4bef-9e38-34652f8634d1" />
+
 
 #### ✏️ Exercice 2.2.c – Créer une vraie fragmentation verticale physique
 
@@ -308,9 +323,22 @@ INSERT INTO MedRec_AI
 ```
 
 > **Votre code SQL :**
-> 
-> ```sql
-> 
+>```sql
+-- Table Fragment B : Données IA
+CREATE TABLE MedRec_AI (
+    idRecord    INTEGER     NOT NULL,
+    idPatient   INTEGER     NOT NULL,
+    country     VARCHAR(100) NOT NULL,
+    aiModelUsed VARCHAR(50),
+    aiScore     DECIMAL(5,4),
+    aiVersion   VARCHAR(20),
+    PRIMARY KEY (idRecord)
+);
+
+-- Insertion pour MedRec_AI
+INSERT INTO MedRec_AI
+    SELECT idRecord, idPatient, country, aiModelUsed, aiScore, aiVersion 
+    FROM MedicalRecords; 
 > ```
 
 ---
@@ -344,13 +372,13 @@ Dessinez (ou décrivez textuellement) le schéma complet des 8 fragments qui ré
 > | Fragment | country | Colonnes |
 > |----------|---------|----------|
 > | F_FR_FIN | France  | idTrans, idPatient, date, amount, currency |
-> | F_FR_MGT | France  | ___ |
-> | F_TN_FIN | Tunisia | ___ |
-> | F_TN_MGT | Tunisia | ___ |
-> | F_CA_FIN | Canada  | ___ |
-> | F_CA_MGT | Canada  | ___ |
-> | F_JP_FIN | Japan   | ___ |
-> | F_JP_MGT | Japan   | ___ |
+> | F_FR_MGT | France  | idTrans, idPatient, type, status |
+> | F_TN_FIN | Tunisia | idTrans, idPatient, date, amount, currency |
+> | F_TN_MGT | Tunisia | idTrans, idPatient, type, status |
+> | F_CA_FIN | Canada  | idTrans, idPatient, date, amount, currency |
+> | F_CA_MGT | Canada  | idTrans, idPatient, type, status |
+> | F_JP_FIN | Japan   | idTrans, idPatient, date, amount, currency |
+> | F_JP_MGT | Japan   | idTrans, idPatient, type, status |
 
 #### ✏️ Exercice 2.3.b – Implémentation SQL des fragments hybrides
 
@@ -387,7 +415,32 @@ ___
 > **Votre code SQL complet :**
 > 
 > ```sql
-> 
+> -- ── Tunisia ─────────────────────────────────────────────────
+CREATE OR REPLACE VIEW Trans_TN_Financial AS
+    SELECT idTrans, idPatient, date, amount, currency
+    FROM Transactions WHERE country = 'Tunisia';
+
+CREATE OR REPLACE VIEW Trans_TN_Management AS
+    SELECT idTrans, idPatient, type, status
+    FROM Transactions WHERE country = 'Tunisia';
+
+-- ── Canada ──────────────────────────────────────────────────
+CREATE OR REPLACE VIEW Trans_CA_Financial AS
+    SELECT idTrans, idPatient, date, amount, currency
+    FROM Transactions WHERE country = 'Canada';
+
+CREATE OR REPLACE VIEW Trans_CA_Management AS
+    SELECT idTrans, idPatient, type, status
+    FROM Transactions WHERE country = 'Canada';
+
+-- ── Japan ───────────────────────────────────────────────────
+CREATE OR REPLACE VIEW Trans_JP_Financial AS
+    SELECT idTrans, idPatient, date, amount, currency
+    FROM Transactions WHERE country = 'Japan';
+
+CREATE OR REPLACE VIEW Trans_JP_Management AS
+    SELECT idTrans, idPatient, type, status
+    FROM Transactions WHERE country = 'Japan';
 > ```
 
 #### ✏️ Exercice 2.3.c – Reconstruction
@@ -405,7 +458,11 @@ JOIN Trans_FR_Management mgt ON ___ = ___;  -- ← condition de jointure
 > **Votre requête complétée :**
 > 
 > ```sql
-> 
+> -- Reconstruction France : joindre F_FR_FIN et F_FR_MGT
+SELECT fin.idTrans, fin.idPatient, fin.date, fin.amount, fin.currency,
+       mgt.type, mgt.status
+FROM Trans_FR_Financial fin
+JOIN Trans_FR_Management mgt ON fin.idTrans = mgt.idTrans;
 > ```
 
 ---
@@ -442,7 +499,7 @@ ORDER BY mr.date DESC;
 **Exécutez cette requête et collez le résultat :**
 
 > ```
-> [VOTRE RÉSULTAT]
+>  Mohamed Benali |  45 | Tunis | Tunisia | 2024-01-22 | Scanner Abdominal | Calcul rénal droit détecté 8mm | NephroAI-1  |  0.9678
 > ```
 
 #### ✏️ Exercice 3.1.b – Analyser le plan d'exécution distribué
@@ -461,15 +518,16 @@ WHERE p.name = 'Mohamed Benali';
 > **Collez votre capture ici :**
 > 
 > ```
-> [VOTRE CAPTURE]
+> <img width="874" height="586" alt="Screenshot 2026-05-02 163147" src="https://github.com/user-attachments/assets/ddad4503-0f46-45f4-912e-7dfb5c4d9565" />
+
 > ```
 
 **Question 3.1.b** : Identifiez dans le plan d'exécution :
-- Le type de JOIN utilisé : _______________
-- Sur quel(s) worker(s) la requête s'exécute-t-elle : _______________
+- Le type de JOIN utilisé : Co-located Join (Distributed Hash Join localisé)
+- Sur quel(s) worker(s) la requête s'exécute-t-elle : Uniquement sur le worker tunisien (citus_worker1)
 - Pourquoi la co-localisation (`country` comme clé commune) est-elle avantageuse ici ?
 
-> _______________________________________________
+> Parce que les données du patient et ses dossiers se trouvent physiquement sur le même nœud. La jointure se fait localement sans aucun transfert de données sur le réseau (pas de shuffle), ce qui maximise les performances.
 
 ---
 
@@ -506,7 +564,7 @@ ORDER BY p.siteOrigin, score_moyen DESC;
 
 **Question 3.2.a** : Quel modèle IA obtient le meilleur score moyen ? Sur quel site ?
 
-> _______________________________________________
+> Le modèle SpineAI-2 avec un score moyen de 0.9921, situé sur le site Paris.
 
 #### ✏️ Exercice 3.2.b – Requête avec filtre sur les données à risque
 
