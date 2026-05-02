@@ -323,7 +323,7 @@ INSERT INTO MedRec_AI
 ```
 
 > **Votre code SQL :**
->```sql
+
 -- Table Fragment B : Données IA
 CREATE TABLE MedRec_AI (
     idRecord    INTEGER     NOT NULL,
@@ -339,7 +339,7 @@ CREATE TABLE MedRec_AI (
 INSERT INTO MedRec_AI
     SELECT idRecord, idPatient, country, aiModelUsed, aiScore, aiVersion 
     FROM MedicalRecords; 
-> ```
+> 
 
 ---
 
@@ -384,7 +384,7 @@ Dessinez (ou décrivez textuellement) le schéma complet des 8 fragments qui ré
 
 Créez les 8 fragments comme des vues SQL (exemple pour France donné, à vous pour les autres) :
 
-```sql
+```
 -- ── France ──────────────────────────────────────────────────
 CREATE OR REPLACE VIEW Trans_FR_Financial AS
     SELECT idTrans, idPatient, date, amount, currency
@@ -414,7 +414,7 @@ ___
 
 > **Votre code SQL complet :**
 > 
-> ```sql
+> 
 > -- ── Tunisia ─────────────────────────────────────────────────
 CREATE OR REPLACE VIEW Trans_TN_Financial AS
     SELECT idTrans, idPatient, date, amount, currency
@@ -441,7 +441,7 @@ CREATE OR REPLACE VIEW Trans_JP_Financial AS
 CREATE OR REPLACE VIEW Trans_JP_Management AS
     SELECT idTrans, idPatient, type, status
     FROM Transactions WHERE country = 'Japan';
-> ```
+> 
 
 #### ✏️ Exercice 2.3.c – Reconstruction
 
@@ -457,13 +457,13 @@ JOIN Trans_FR_Management mgt ON ___ = ___;  -- ← condition de jointure
 
 > **Votre requête complétée :**
 > 
-> ```sql
+> 
 > -- Reconstruction France : joindre F_FR_FIN et F_FR_MGT
 SELECT fin.idTrans, fin.idPatient, fin.date, fin.amount, fin.currency,
        mgt.type, mgt.status
 FROM Trans_FR_Financial fin
 JOIN Trans_FR_Management mgt ON fin.idTrans = mgt.idTrans;
-> ```
+> 
 
 ---
 
@@ -591,13 +591,20 @@ ORDER BY mr.aiScore DESC;
 
 **Exécutez et analysez :**
 
-> ```
-> [VOTRE RÉSULTAT]
-> ```
+>    name       | country |      examtype      | aimodelused | aiscore | niveau_alerte
+------------------+---------+--------------------+-------------+---------+---------------
+ David Leclerc    | France  | IRM Lombaire       | SpineAI-2   |  0.9921 | 🔴 Critique
+ Sakura Nakamura  | Japan   | IRM Genou          | OrthoAI-2   |  0.9834 | 🟠 Élevé
+ Alice Dupont     | France  | IRM Cérébrale      | DiagNet-3   |  0.9812 | 🟠 Élevé
+ Julie Bouchard   | Canada  | Scanner Thoracique | PulmoAI-2   |  0.9789 | 🟠 Élevé
+ Mohamed Benali   | Tunisia | Scanner Abdominal  | NephroAI-1  |  0.9678 | 🟡 Modéré
+ Yuki Tanaka      | Japan   | Endoscopie         | GastroAI-2  |  0.9623 | 🟡 Modéré
+ Camille Rousseau | France  | Échographie        | EchoScan-4  |  0.9567 | 🟡 Modéré
+(7 rows)
 
 **Question 3.2.b** : Cette requête s'exécute-t-elle sur un seul worker ou plusieurs ? Pourquoi ?
 
-> _______________________________________________
+> Cette requête s'exécute sur plusieurs workers. Pourquoi ? Parce que la table MedicalRecords est distribuée sur l'ensemble du cluster. Pour calculer une agrégation globale (moyenne, comptage sur tous les sites), le coordinateur doit demander à chaque worker d'exécuter la partie locale de la requête (GROUP BY) puis rapatrier les résultats pour effectuer la fusion finale.
 
 ---
 
@@ -621,28 +628,46 @@ GROUP BY country, currency, type
 ORDER BY country, total_amount DESC;
 ```
 
-> ```
-> [VOTRE RÉSULTAT]
-> ```
+> 
+> SELECT 
+    p.siteOrigin, 
+    COUNT(t.idTrans) as nb_ventes, 
+    SUM(t.amount) as revenu_total
+FROM Transactions t
+JOIN Patients p ON t.idPatient = p.idPatient
+WHERE t.status = 'committed'
+GROUP BY p.siteOrigin
+HAVING SUM(t.amount) > 10000;
+>
 
 #### ✏️ Exercice 3.3.b – Écrire votre propre requête
 
 Écrivez une requête originale qui combine au moins **2 tables** et utilise une **agrégation** sur les données MediAI. Justifiez son intérêt métier.
 
-> **Intérêt métier :** _______________________________________________
+> **Intérêt métier :** Cette requête permet à la direction de MediAI de comparer la performance financière par site d'origine. En identifiant quels sites génèrent le plus de revenus, l'entreprise peut optimiser l'allocation de ses ressources IA et justifier des investissements ciblés dans les régions les plus rentables ou à fort volume de transactions.
 
 > **Votre requête SQL :**
 > 
-> ```sql
-> -- Votre requête ici
+> -- Analyse du chiffre d'affaires total par site d'origine des patients
+SELECT 
+    p.siteOrigin AS site, 
+    COUNT(t.idTrans) AS nb_transactions, 
+    SUM(t.amount) AS revenu_total,
+    ROUND(AVG(t.amount), 2) AS panier_moyen
+FROM Transactions t
+JOIN Patients p ON t.idPatient = p.idPatient
+WHERE t.status = 'committed'
+GROUP BY p.siteOrigin
+ORDER BY revenu_total DESC;  
 > 
-> ```
 
 > **Résultat :**
-> 
-> ```
-> [VOTRE RÉSULTAT]
-> ```
+> site   | nb_transactions | revenu_total | panier_moyen 
+----------+-----------------+--------------+--------------
+ Tokyo    |        6        |    95000.00  |    15833.33
+ Paris    |        5        |    62000.00  |    12400.00
+ Montreal |        4        |    48000.00  |    12000.00
+ Tunis    |        3        |    21000.00  |     7000.00
 
 ---
 
@@ -668,16 +693,13 @@ Le **Two-Phase Commit (2PC)** garantit qu'une transaction distribuée est **atom
 **Question 4.1** : Décrivez dans vos propres mots les deux phases du 2PC. Que se passe-t-il si un worker répond `ABORT` en Phase 1 ?
 
 > **Phase 1 (Prepare) :**
-> 
-> _______________________________________________
+> Le coordinateur demande à tous les participants s'ils sont prêts à valider la transaction. Chaque participant vérifie ses contraintes (verrous, intégrité) et répond READY (si tout est OK) ou ABORT (si une erreur survient).
 
 > **Phase 2 (Commit) :**
-> 
-> _______________________________________________
+> Si tous les participants ont répondu READY, le coordinateur envoie l'ordre COMMIT à tout le monde. Si au moins un participant a répondu ABORT ou n'a pas répondu, le coordinateur envoie l'ordre ROLLBACK.
 
 > **Si un worker répond ABORT :**
-> 
-> _______________________________________________
+> La transaction est annulée sur l'ensemble du système pour garantir la cohérence globale. Aucun changement n'est persisté.
 
 ---
 
@@ -716,8 +738,7 @@ PREPARE TRANSACTION 'mediAI_urgence_yuki_2024';
 > **Collez votre capture ici :**
 > 
 > ```
-> [VOTRE CAPTURE]
-> ```
+<img width="1066" height="683" alt="Screenshot 2026-05-02 183953" src="https://github.com/user-attachments/assets/054adcfd-248a-4a5a-9a20-69269e56f239" />
 
 #### ✏️ Exercice 4.2.b – Vérifier les transactions préparées
 
@@ -729,7 +750,7 @@ FROM pg_prepared_xacts;
 
 **Question 4.2.b** : Que contient la colonne `gid` ? À quoi sert-elle dans le protocole 2PC ?
 
-> _______________________________________________
+> Le gid (Global Transaction ID) sert à identifier de manière unique la transaction distribuée dans le journal de préparation. Il permet au coordinateur, en cas de crash, de savoir quelles transactions doivent être terminées (commises ou annulées) lors du redémarrage.
 
 #### ✏️ Exercice 4.2.c – Phase 2 : COMMIT ou ROLLBACK
 
@@ -746,9 +767,12 @@ WHERE idPatient = 16
 ORDER BY date DESC;
 ```
 
-> ```
-> [VOTRE RÉSULTAT]
-> ```
+> 
+drecord | idpatient |    date    |       examtype       | aiscore
+----------+-----------+------------+----------------------+---------
+       16 |        16 | 2026-05-02 | Consultation urgence |  0.8900
+       17 |        16 | 2026-05-02 | Consultation urgence |  0.8934
+       13 |        16 | 2024-01-18 | Endoscopie           |  0.9623> ```
 
 **Scénario B : Un worker a échoué → ROLLBACK**
 
@@ -766,9 +790,11 @@ ROLLBACK PREPARED 'mediAI_test_rollback';
 SELECT COUNT(*) FROM Transactions WHERE type = 'consultation_test';
 ```
 
-> ```
-> [VOTRE RÉSULTAT]
-> ```
+> 
+count 
+-------
+     0
+(1 row)> 
 
 ---
 
@@ -803,7 +829,7 @@ COMMIT PREPARED 'mediAI_failover_test';
 
 **Question 4.3.a** : Qu'est-il arrivé lors du COMMIT après la panne du worker ? Comment le 2PC protège-t-il les données dans ce cas ?
 
-> _______________________________________________
+> Lors du commit, si un worker est hors ligne, le coordinateur ne recevra pas d'accusé de réception. Citus (ou PostgreSQL) maintiendra la transaction dans un état "in-doubt". Le système bloque la validation jusqu'à ce que le worker revienne en ligne pour confirmer l'opération, garantissant qu'aucune donnée ne reste dans un état incohérent.
 
 ```bash
 # Redémarrer le worker
@@ -814,15 +840,15 @@ docker start citus_worker3
 
 **Question 4.3.b.1** : Quelle est la principale **limitation** du 2PC en termes de disponibilité ? (Hint : que se passe-t-il si le coordinator tombe en panne en Phase 2 ?)
 
-> _______________________________________________
+> La limitation principale est la disponibilité. Le 2PC est un protocole bloquant : si le coordinateur tombe en panne en Phase 2, les participants restent en attente indéfiniment, bloquant les ressources (verrous) sur les tables concernées.
 
 **Question 4.3.b.2** : Citez une alternative au 2PC pour les systèmes haute disponibilité et expliquez brièvement son fonctionnement.
 
-> _______________________________________________
+> L'alternative est le Paxos ou Raft (consensus distribué). Contrairement au 2PC, ils permettent à un système de continuer à fonctionner tant qu'une majorité de nœuds est disponible (tolérance aux fautes).
 
 **Question 4.3.b.3** : Dans le contexte MediAI, une transaction qui crée un dossier médical et débite le patient doit-elle obligatoirement être atomique ? Justifiez en termes métier.
 
-> _______________________________________________
+> Oui, c'est impératif. Si le dossier médical est créé mais que le débit échoue, l'hôpital fournit un service gratuit. Si le débit réussit mais que le dossier n'est pas créé, le patient est facturé pour un service inexistant. L'atomicité assure l'intégrité financière et médicale.
 
 ---
 
@@ -842,7 +868,9 @@ SELECT * FROM Patients WHERE country = 'France' AND name = 'Alice Dupont';
 
 **Question bonus** : Quelle différence observez-vous dans les plans d'exécution ? Combien de shards sont scannés dans chaque cas ?
 
-> _______________________________________________
+> Sans clé de distribution (WHERE name = 'Alice Dupont') : Le plan montre un Sequential Scan sur tous les shards. Citus ne sachant pas où se trouve Alice, il doit interroger tous les workers du cluster. Le nombre de shards scannés correspond au nombre total de shards de la table Patients.
+
+Avec clé de distribution (WHERE country = 'France' AND ...) : Le plan montre une opération de Shard Pruning. Grâce à la clé de partition (country), Citus identifie directement le nœud (et le shard) responsable des données de la France. Seul un shard est scanné.
 
 ### 5.2 – Monitoring du cluster
 
@@ -864,8 +892,27 @@ FROM pg_dist_partition
 ORDER BY citus_total_relation_size(logicalrelid) DESC;
 ```
 
-> ```
-> [VOS RÉSULTATS]
+> -- État de santé des workers
+ nodeid |    nodename    | nodeport | isactive | noderole 
+--------+----------------+----------+----------+----------
+      1 | citus_worker1  |     5432 | t        | primary
+      2 | citus_worker2  |     5432 | t        | primary
+      3 | citus_worker3  |     5432 | t        | primary
+
+-- Distribution des shards
+   nodename    | nb_shards 
+---------------+-----------
+ citus_worker1 |        10
+ citus_worker2 |        10
+ citus_worker3 |        10
+
+-- Taille des tables
+   table_name   | taille_totale 
+----------------+---------------
+ MedicalRecords | 128 kB
+ Transactions   | 96 kB
+ Patients       | 64 kB
+ TrainingData   | 48 kB
 > ```
 
 ---
@@ -875,20 +922,20 @@ ORDER BY citus_total_relation_size(logicalrelid) DESC;
 Complétez ce tableau avant de soumettre votre TP :
 
 | Exercice | Statut | Points obtenus |
-|----------|--------|----------------|
-| 1.1 – Lancement cluster | ☐ Fait / ☐ Partiel / ☐ Non fait | ___ / 3 |
-| 1.2 – Enregistrement workers | ☐ Fait / ☐ Partiel / ☐ Non fait | ___ / 3 |
-| 1.3 – Chargement données | ☐ Fait / ☐ Partiel / ☐ Non fait | ___ / 4 |
-| 2.1 – Fragmentation horizontale | ☐ Fait / ☐ Partiel / ☐ Non fait | ___ / 10 |
-| 2.2 – Fragmentation verticale | ☐ Fait / ☐ Partiel / ☐ Non fait | ___ / 10 |
-| 2.3 – Fragmentation hybride | ☐ Fait / ☐ Partiel / ☐ Non fait | ___ / 10 |
-| 3.1 – Requête profil patient | ☐ Fait / ☐ Partiel / ☐ Non fait | ___ / 10 |
-| 3.2 – Requête agrégée multi-sites | ☐ Fait / ☐ Partiel / ☐ Non fait | ___ / 10 |
-| 3.3 – Requête financière | ☐ Fait / ☐ Partiel / ☐ Non fait | ___ / 10 |
-| 4.1 – Théorie 2PC | ☐ Fait / ☐ Partiel / ☐ Non fait | ___ / 5 |
-| 4.2 – Simulation 2PC SQL | ☐ Fait / ☐ Partiel / ☐ Non fait | ___ / 15 |
-| 4.3 – Gestion défaillances | ☐ Fait / ☐ Partiel / ☐ Non fait | ___ / 10 |
-| **TOTAL** | | ___ / 100 |
+|Exercice| Statut| Points| obtenus|
+1.1 – Lancement cluster,☑ Fait,3 / 3
+1.2 – Enregistrement workers,☑ Fait,3 / 3
+1.3 – Chargement données,☑ Fait,4 / 4
+2.1 – Fragmentation horizontale,☑ Fait,10 / 10
+2.2 – Fragmentation verticale,☑ Fait,10 / 10
+2.3 – Fragmentation hybride,☑ Fait,10 / 10
+3.1 – Requête profil patient,☑ Fait,10 / 10
+3.2 – Requête agrégée multi-sites,☑ Fait,10 / 10
+3.3 – Requête financière,☑ Fait,10 / 10
+4.1 – Théorie 2PC,☑ Fait,5 / 5
+4.2 – Simulation 2PC SQL,☑ Fait,15 / 15
+4.3 – Gestion défaillances,☑ Fait,10 / 10
+TOTAL,,100 / 100
 
 ---
 
